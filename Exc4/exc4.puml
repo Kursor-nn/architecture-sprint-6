@@ -1,0 +1,48 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Person(client, "Клиент", "Клиент")
+System_Ext(payment_service, "Платежный сервис", "Cервис для проведения оплат")
+System_Ext(partner_systems, "Системы партнеров", "Система оформления страховок")
+System_Ext(insurance_systems, "Системы страховых компаний", "Система получения тарифов")
+
+System_Boundary(InsureTech_Prod, "InsureTech Prod") {
+    System_Boundary(InsureTech_Prod, "InsureTech Prod Core") {
+        Container(insuretech_web, "InsureTech Web", "JavaScript", "Веб-приложение")
+        Container(client_info, "client-info", "Java, SpringBoot", "Сервис клиентских данных")
+        Container(core_app, "core-app", "Java, SpringBoot", "Сервис отображения и обработки данных по страховкам")
+        ContainerDb(core_db, "core-db", "PostgreSQL", "БД тарифов и заявок")
+    }
+
+    Container(ins_product_service, "insurance-product-service", "Java, SpringBoot", "Сервис интеграции со страховых компаний и агрегации данных")
+    Container(ins_comp_settlement, "ins-comp-settlement", "Java, SpringBoot", "Сервис для учета расчетов со страховыми компаниями")
+    ContainerDb(ins_comp_settlement_db, "ins-comp-settlement-db", "PostgreSQL", "БД для учета расчетов со страховыми компаниями")
+
+    System_Boundary(InsureTech_Prod, "InsureTech Prod Info transport") {
+        ContainerQueue(product_stream, "Topic", "Event Streaming", "Поток данных")
+        ContainerQueue(core_subscription, "Core Subscription", "Event Streaming", "Подписка на обновления")
+        ContainerQueue(settlement_subscription, "Settlement Subscription", "Event Streaming", "Подписка на обновления")
+    }
+
+    Container(ensure_api_service, "osago-aggregator", "Java, SpringBoot", "Сервис адаптер к страховым компаниям для ОСАГО")
+    ContainerDb(ensure_api_service_db, "osago-db", "PostgreSQL", "БД заявок")
+    ensure_api_service --> insurance_systems : "Создать заявку и получить предложение"
+    core_app --> ensure_api_service : "Отправка заявки"
+    ensure_api_service --> ensure_api_service_db : "Запись/Чтение заявок"
+    client --> insuretech_web : "Получение информации"
+    insuretech_web --> core_app : "Запрос данных"
+    core_app --> core_subscription : "Получение обновлений"
+    core_app --> core_db : "Чтение/Запись данных"
+    ins_product_service --> insurance_systems : "Запрос данных"
+    ins_product_service --> product_stream : "Публикация обновлений"
+    product_stream --> core_app : "Получение обновлений"
+    ins_comp_settlement --> settlement_subscription : "Получение обновлений""
+    ins_comp_settlement --> core_app : "Запрос"
+    ins_comp_settlement --> ins_comp_settlement_db : "Чтение/Запись"
+    payment_service --> core_app : "Проведение оплат"
+    partner_systems --> core_app : "Оформление страховок"
+    product_stream --> ins_comp_settlement : "Получение обновлений"
+    core_app --> ensure_api_service : "Circuit Breaker + Retry + Timeout"
+}
+
+@enduml

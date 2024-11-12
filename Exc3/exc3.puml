@@ -1,0 +1,43 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Person(client, "Клиент", "Клиент")
+System_Ext(payment_service, "Платежный сервис", "Сервис для проведения оплат")
+System_Ext(external_systems, "Системы оформления страховок", "Системы для оформления страховок")
+System_Ext(insurance_systems, "Системы страховых компаний", "Системы получения страховых тарифов")
+
+System_Boundary(InsureTech_Prod, "InsureTech Prod (Virtual Machine)") {
+
+    System_Boundary(InsureTech_Prod_MOnolit, "InsureTech Prod Monolit") {
+        Container(it_web, "InsureTech WebUI", "JavaScript", "UI-приложение InsureTech")
+        Container(core_service, "core-app", "Java, SpringBoot", "Монолит для отображения и обработки данных основных данных")
+        ContainerDb(core_db, "core-db", "PostgreSQL", "Хранения тарифов и заявок")
+    }
+
+    Container(integration_adapter_service, "ins-product-aggregator", "Kotlin, SpringBoot", "Сервис adapter для сторонних страховых компаний и агрегации данных")
+    Container(calc_service, "calc_serivce", "Kotlin, SpringBoot", "Сервис расчетов со страховыми компаниями")
+    ContainerDb(ins_comp_settlement_db, "calc_serivce-db", "PostgreSQL", "БД расчетов со страховыми компаниями")
+
+    System_Boundary(InsureTech_Prod_Queue_System, "InsureTech Prod Queues") {
+        ContainerQueue(product_stream, "Kafka Topic", "Event Streaming", "Поток данных по продуктам и тарифам")
+        ContainerQueue(core_subscription, "Core Subscription", "Event Streaming", "Подписка на обновления продуктов и тарифов")
+        ContainerQueue(settlement_subscription, "Settlement Subscription", "Event Streaming", "Подписка на обновления продуктов и тарифов")
+    }
+
+    client --> it_web : "Получение информации"
+    it_web --> core_service : "Получение данных"
+    core_service --> core_subscription : "Получение обновлений"
+    core_service --> core_db : "Чтение/Запись данных"
+    integration_adapter_service --> insurance_systems : "Запрос продуктов и тарифов"
+    integration_adapter_service --> product_stream : "Публикация обновлений"
+    product_stream --> core_service : "Получение обновлений"
+    calc_service --> settlement_subscription : "Публикация обновлений"
+    calc_service --> core_service : "Запрос данных"
+    calc_service --> ins_comp_settlement_db : "Чтение/Запись"
+    payment_service --> core_service : "Оплата"
+    external_systems --> core_service : "Оформление страховок"
+    product_stream --> calc_service : "Получение обновлений"
+}
+
+
+@enduml
